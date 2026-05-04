@@ -1,0 +1,39 @@
+# Git and local engineering artifacts
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Node / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+frontend/dist/
+frontend/.vite/
+
+# Local SQLite and uploaded fonts
+backend/data/*.sqlite3
+backend/data/*.sqlite3-*
+backend/data/fonts/*
+!backend/data/fonts/.gitkeep
+backend/data/unicode/Blocks.txt
+backend/data/unicode/UnicodeData.txt
+
+# Environment files
+.env
+.env.*
+!.env.example
+
