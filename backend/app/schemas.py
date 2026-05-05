@@ -58,6 +58,18 @@ class FontCharacterSupport(BaseModel):
     supported: bool
 
 
+class FontCoveragePageCharacter(UnicodeCharacter):
+    supported: bool
+
+
+class FontCoveragePage(BaseModel):
+    items: list[FontCoveragePageCharacter]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
 class CoverageCharacter(BaseModel):
     codepoint: int
     display_codepoint: str

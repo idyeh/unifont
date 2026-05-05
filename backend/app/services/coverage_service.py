@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from sqlite3 import Connection
 
-from app.schemas import BlockCoverage, CoverageCharacter
-from app.services.unicode_service import character_name, format_codepoint, get_block, safe_character
+from app.schemas import BlockCoverage, CoverageCharacter, FontCoveragePage, FontCoveragePageCharacter
+from app.services.unicode_service import (
+    character_name,
+    format_codepoint,
+    get_block,
+    list_characters_for_block,
+    safe_character,
+)
 
 
 def _coverage_character(codepoint: int) -> CoverageCharacter:
@@ -61,3 +67,47 @@ def calculate_block_coverage(
         list_limit=list_limit,
     )
 
+
+def calculate_page_support(
+    connection: Connection, font_id: int, block_id: int, page: int = 1, page_size: int = 128
+) -> FontCoveragePage | None:
+    block = get_block(connection, block_id)
+    if not block:
+        return None
+
+    font_exists = connection.execute("SELECT 1 FROM fonts WHERE id = ?", (font_id,)).fetchone()
+    if not font_exists:
+        return None
+
+    characters = list_characters_for_block(connection, block_id, page, page_size)
+    if not characters.items:
+        return FontCoveragePage(
+            items=[],
+            page=characters.page,
+            page_size=characters.page_size,
+            total=characters.total,
+            total_pages=characters.total_pages,
+        )
+
+    first = min(character.codepoint for character in characters.items)
+    last = max(character.codepoint for character in characters.items)
+    rows = connection.execute(
+        """
+        SELECT codepoint
+        FROM font_codepoints
+        WHERE font_id = ? AND codepoint BETWEEN ? AND ?
+        """,
+        (font_id, first, last),
+    ).fetchall()
+    supported = {row["codepoint"] for row in rows}
+
+    return FontCoveragePage(
+        items=[
+            FontCoveragePageCharacter(**character.model_dump(), supported=character.codepoint in supported)
+            for character in characters.items
+        ],
+        page=characters.page,
+        page_size=characters.page_size,
+        total=characters.total,
+        total_pages=characters.total_pages,
+    )

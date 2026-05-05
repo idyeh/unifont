@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from pathlib import Path
+
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
 
 from app.database import get_connection
-from app.schemas import BlockCoverage, FontCharacterSupport, FontDetail, FontSummary
+from app.schemas import (
+    BlockCoverage,
+    FontCharacterSupport,
+    FontCoveragePage,
+    FontDetail,
+    FontSummary,
+)
 from app.services import coverage_service, font_service, unicode_service
 
 router = APIRouter(prefix="/api/fonts", tags=["fonts"])
@@ -30,6 +39,27 @@ def font(font_id: int) -> FontDetail:
         return result
 
 
+@router.get("/{font_id}/file")
+def font_file(font_id: int) -> FileResponse:
+    media_types = {
+        "otf": "font/otf",
+        "ttf": "font/ttf",
+        "woff2": "font/woff2",
+    }
+    with get_connection() as connection:
+        result = font_service.get_font(connection, font_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Font not found.")
+        path = Path(result.file_path)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Font file not found.")
+        return FileResponse(
+            path,
+            media_type=media_types.get(result.file_format, "application/octet-stream"),
+            filename=path.name,
+        )
+
+
 @router.get("/{font_id}/characters/{codepoint}/support", response_model=FontCharacterSupport)
 def character_support(font_id: int, codepoint: str) -> FontCharacterSupport:
     try:
@@ -47,6 +77,20 @@ def character_support(font_id: int, codepoint: str) -> FontCharacterSupport:
             display_codepoint=unicode_service.format_codepoint(parsed),
             supported=supported,
         )
+
+
+@router.get("/{font_id}/coverage/{block_id}/characters", response_model=FontCoveragePage)
+def coverage_page(
+    font_id: int,
+    block_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(128, ge=1, le=512),
+) -> FontCoveragePage:
+    with get_connection() as connection:
+        result = coverage_service.calculate_page_support(connection, font_id, block_id, page, page_size)
+        if not result:
+            raise HTTPException(status_code=404, detail="Font or Unicode block not found.")
+        return result
 
 
 @router.delete("/{font_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)

@@ -66,3 +66,15 @@ export type FontCharacterSupport = {
   display_codepoint: string;
   supported: boolean;
 };
+
+export type FontCoveragePageCharacter = UnicodeCharacter & {
+  supported: boolean;
+};
+
+export type FontCoveragePage = {
+  items: FontCoveragePageCharacter[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+};

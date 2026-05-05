@@ -1,10 +1,11 @@
-import type { BlockCoverage } from "../types";
+import type { BlockCoverage, CoverageCharacter } from "../types";
 
 type Props = {
   coverage?: BlockCoverage;
+  onCharacterSelect?: (character: CoverageCharacter) => void;
 };
 
-export function CoverageTable({ coverage }: Props) {
+export function CoverageTable({ coverage, onCharacterSelect }: Props) {
   if (!coverage) {
     return <div className="empty-state compact">Upload or select a font to inspect coverage.</div>;
   }
@@ -26,8 +27,16 @@ export function CoverageTable({ coverage }: Props) {
         </div>
       </div>
       <div className="coverage-lists">
-        <CharacterList title="Supported" characters={coverage.supported_characters} />
-        <CharacterList title="Missing" characters={coverage.missing_characters} />
+        <CharacterList
+          title="Supported sample"
+          characters={coverage.supported_characters}
+          onCharacterSelect={onCharacterSelect}
+        />
+        <CharacterList
+          title="Missing sample"
+          characters={coverage.missing_characters}
+          onCharacterSelect={onCharacterSelect}
+        />
       </div>
     </section>
   );
@@ -35,22 +44,27 @@ export function CoverageTable({ coverage }: Props) {
 
 function CharacterList({
   title,
-  characters
+  characters,
+  onCharacterSelect
 }: {
   title: string;
   characters: BlockCoverage["supported_characters"];
+  onCharacterSelect?: (character: CoverageCharacter) => void;
 }) {
   return (
     <div className="coverage-list">
       <div className="panel-title">{title}</div>
       <div className="mini-grid">
         {characters.slice(0, 120).map((character) => (
-          <span key={character.codepoint} title={`${character.display_codepoint} ${character.name}`}>
+          <button
+            key={character.codepoint}
+            title={`${character.display_codepoint} ${character.name}`}
+            onClick={() => onCharacterSelect?.(character)}
+          >
             {character.char}
-          </span>
+          </button>
         ))}
       </div>
     </div>
   );
 }
-

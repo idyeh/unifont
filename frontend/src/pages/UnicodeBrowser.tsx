@@ -6,8 +6,26 @@ import { CharacterGrid } from "../components/CharacterGrid";
 import { CoverageTable } from "../components/CoverageTable";
 import { FontUpload } from "../components/FontUpload";
 import { PaginationControls } from "../components/PaginationControls";
-import type { BlockCoverage, FontSummary, PaginatedCharacters, UnicodeBlock, UnicodeCharacter } from "../types";
-import { fontLabel } from "../utils/codepoint";
+import type {
+  BlockCoverage,
+  CoverageCharacter,
+  FontSummary,
+  PaginatedCharacters,
+  UnicodeBlock,
+  UnicodeCharacter
+} from "../types";
+import { fontLabel, formatCodepoint } from "../utils/codepoint";
+
+const PAGE_SIZE = 128;
+
+function parseCodepointInput(value: string): number | undefined {
+  const normalized = value.trim().toUpperCase().replace(/^U\+/, "").replace(/^0X/, "");
+  if (!/^[0-9A-F]+$/.test(normalized)) {
+    return undefined;
+  }
+  const codepoint = Number.parseInt(normalized, 16);
+  return Number.isFinite(codepoint) && codepoint >= 0 && codepoint <= 0x10ffff ? codepoint : undefined;
+}
 
 export function UnicodeBrowser() {
   const [blocks, setBlocks] = useState<UnicodeBlock[]>([]);
@@ -18,7 +36,10 @@ export function UnicodeBrowser() {
   const [fonts, setFonts] = useState<FontSummary[]>([]);
   const [selectedFontId, setSelectedFontId] = useState<number>();
   const [coverage, setCoverage] = useState<BlockCoverage>();
+  const [supportByCodepoint, setSupportByCodepoint] = useState<Map<number, boolean>>();
   const [fontSupportsCharacter, setFontSupportsCharacter] = useState<boolean>();
+  const [jumpInput, setJumpInput] = useState("");
+  const [pendingJumpCodepoint, setPendingJumpCodepoint] = useState<number>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -44,24 +65,48 @@ export function UnicodeBrowser() {
       return;
     }
     void api
-      .characters(selectedBlock.id, page)
+      .characters(selectedBlock.id, page, PAGE_SIZE)
       .then((result) => {
         setCharacters(result);
-        setSelectedCharacter((current) => current ?? result.items[0]);
+        setSelectedCharacter((current) => {
+          if (pendingJumpCodepoint !== undefined) {
+            return result.items.find((item) => item.codepoint === pendingJumpCodepoint) ?? result.items[0];
+          }
+          if (current && result.items.some((item) => item.codepoint === current.codepoint)) {
+            return current;
+          }
+          return result.items[0];
+        });
+        setPendingJumpCodepoint(undefined);
       })
       .catch((err: Error) => setError(err.message));
-  }, [selectedBlock, page]);
+  }, [selectedBlock, page, pendingJumpCodepoint]);
 
   useEffect(() => {
     if (!selectedBlock || !selectedFontId) {
       setCoverage(undefined);
       return;
     }
+    setCoverage(undefined);
     void api
       .coverage(selectedFontId, selectedBlock.id)
       .then(setCoverage)
       .catch((err: Error) => setError(err.message));
   }, [selectedBlock, selectedFontId]);
+
+  useEffect(() => {
+    if (!selectedBlock || !selectedFontId) {
+      setSupportByCodepoint(undefined);
+      return;
+    }
+    setSupportByCodepoint(undefined);
+    void api
+      .coveragePage(selectedFontId, selectedBlock.id, page, PAGE_SIZE)
+      .then((result) => {
+        setSupportByCodepoint(new Map(result.items.map((item) => [item.codepoint, item.supported])));
+      })
+      .catch((err: Error) => setError(err.message));
+  }, [selectedBlock, selectedFontId, page]);
 
   useEffect(() => {
     if (!selectedFontId || !selectedCharacter) {
@@ -75,7 +120,10 @@ export function UnicodeBrowser() {
   }, [selectedFontId, selectedCharacter]);
 
   const selectedFont = fonts.find((font) => font.id === selectedFontId);
-  const fontStack = selectedFont ? `"${fontLabel(selectedFont)}", system-ui, sans-serif` : undefined;
+  const selectedFontFace = selectedFont ? `uploaded-font-${selectedFont.id}` : undefined;
+  const fontStack = selectedFont
+    ? `"${selectedFontFace}", "${fontLabel(selectedFont)}", system-ui, sans-serif`
+    : undefined;
 
   async function uploadFont(file: File) {
     const font = await api.uploadFont(file);
@@ -84,8 +132,46 @@ export function UnicodeBrowser() {
     setSelectedFontId(font.id);
   }
 
+  function jumpToCodepoint() {
+    if (!selectedBlock) {
+      return;
+    }
+    const codepoint = parseCodepointInput(jumpInput);
+    if (codepoint === undefined) {
+      setError("Enter a hexadecimal code point such as U+4E2D.");
+      return;
+    }
+    navigateToCodepoint(codepoint);
+  }
+
+  function navigateToCodepoint(codepoint: number) {
+    if (!selectedBlock) {
+      return;
+    }
+    if (codepoint < selectedBlock.start_codepoint || codepoint > selectedBlock.end_codepoint) {
+      setError(`${formatCodepoint(codepoint)} is outside ${selectedBlock.name}.`);
+      return;
+    }
+    setJumpInput(formatCodepoint(codepoint));
+    setPendingJumpCodepoint(codepoint);
+    setPage(Math.floor((codepoint - selectedBlock.start_codepoint) / PAGE_SIZE) + 1);
+  }
+
+  function navigateToCoverageCharacter(character: CoverageCharacter) {
+    navigateToCodepoint(character.codepoint);
+  }
+
   return (
     <main className="app-shell">
+      {selectedFont && selectedFontFace && (
+        <style>{`
+          @font-face {
+            font-family: "${selectedFontFace}";
+            src: url("${api.fontFileUrl(selectedFont.id)}");
+            font-display: block;
+          }
+        `}</style>
+      )}
       <BlockNavigator
         blocks={blocks}
         selectedBlockId={selectedBlock?.id}
@@ -125,6 +211,20 @@ export function UnicodeBrowser() {
           <section className="grid-panel">
             <div className="grid-toolbar">
               <span>{characters?.total ?? 0} code points</span>
+              <div className="jump-control">
+                <input
+                  value={jumpInput}
+                  onChange={(event) => setJumpInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      jumpToCodepoint();
+                    }
+                  }}
+                  placeholder="U+4E2D"
+                  aria-label="Jump to code point"
+                />
+                <button onClick={jumpToCodepoint}>Go</button>
+              </div>
               {characters && (
                 <PaginationControls page={characters.page} totalPages={characters.total_pages} onPageChange={setPage} />
               )}
@@ -133,6 +233,7 @@ export function UnicodeBrowser() {
               characters={characters?.items ?? []}
               selectedCodepoint={selectedCharacter?.codepoint}
               fontStack={fontStack}
+              supportByCodepoint={supportByCodepoint}
               onSelect={setSelectedCharacter}
             />
           </section>
@@ -143,7 +244,7 @@ export function UnicodeBrowser() {
               fontSupportsCharacter={fontSupportsCharacter}
               fontStack={fontStack}
             />
-            <CoverageTable coverage={coverage} />
+            <CoverageTable coverage={coverage} onCharacterSelect={navigateToCoverageCharacter} />
           </aside>
         </div>
       </section>

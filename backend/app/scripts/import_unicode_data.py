@@ -45,17 +45,18 @@ def import_unicode_data() -> None:
     init_db()
     blocks_path = UNICODE_DATA_DIR / "Blocks.txt"
     unicode_data_path = UNICODE_DATA_DIR / "UnicodeData.txt"
-    blocks = _read_blocks(blocks_path)
-    names = _read_unicode_names(unicode_data_path)
 
     with get_connection() as connection:
-        connection.execute("DELETE FROM block_font_configs")
-        connection.execute("DELETE FROM unicode_characters")
-        connection.execute("DELETE FROM unicode_blocks")
-
         if not blocks_path.exists() and not unicode_data_path.exists():
             seed_unicode_data(connection)
             return
+
+        blocks = _read_blocks(blocks_path)
+        names = _read_unicode_names(unicode_data_path)
+
+        connection.execute("DELETE FROM block_font_configs")
+        connection.execute("DELETE FROM unicode_characters")
+        connection.execute("DELETE FROM unicode_blocks")
 
         for sort_order, (name, start, end) in enumerate(blocks, start=1):
             cursor = connection.execute(
@@ -97,4 +98,3 @@ def import_unicode_data() -> None:
 
 if __name__ == "__main__":
     import_unicode_data()
-

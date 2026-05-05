@@ -1,6 +1,7 @@
 import type {
   BlockCoverage,
   FontCharacterSupport,
+  FontCoveragePage,
   FontSummary,
   PaginatedCharacters,
   UnicodeBlock,
@@ -39,8 +40,13 @@ export const api = {
   },
   coverage: (fontId: number, blockId: number) =>
     request<BlockCoverage>(`/api/fonts/${fontId}/coverage/${blockId}`),
+  coveragePage: (fontId: number, blockId: number, page: number, pageSize = 128) =>
+    request<FontCoveragePage>(
+      `/api/fonts/${fontId}/coverage/${blockId}/characters?page=${page}&page_size=${pageSize}`
+    ),
   characterSupport: (fontId: number, codepoint: string) =>
     request<FontCharacterSupport>(`/api/fonts/${fontId}/characters/${codepoint}/support`),
+  fontFileUrl: (fontId: number) => `${API_BASE}/api/fonts/${fontId}/file`,
   saveFontConfig: (blockId: number, fontIds: number[]) =>
     request(`/api/font-config/${blockId}`, {
       method: "PUT",
