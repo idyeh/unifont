@@ -2,6 +2,8 @@
 
 Local-first Unicode and font coverage browser built with React, FastAPI, SQLite, and fontTools.
 
+![screenshot](./screenshot.png)
+
 ## Run Locally
 
 Backend:
